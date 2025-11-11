@@ -1,78 +1,55 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { subjectSchema } from '@/lib/validation'
-import { z } from 'zod'
-import { Prisma } from '@prisma/client'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const subjects = await prisma.subject.findMany({
-      orderBy: { name: 'asc' },
+    const { searchParams } = new URL(request.url)
+    const classId = searchParams.get('classId')
+    
+    const objectives = await prisma.learningObjective.findMany({
+      where: classId ? { classId } : undefined,
+      include: { class: true },
+      orderBy: { title: 'asc' },
     })
-    return NextResponse.json(subjects)
+    return NextResponse.json(objectives)
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch subjects' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to fetch learning objectives' }, { status: 500 })
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const validated = subjectSchema.parse(body)
-    const subject = await prisma.subject.create({ data: validated })
-    return NextResponse.json(subject, { status: 201 })
+    const objective = await prisma.learningObjective.create({
+      data: {
+        title: body.title,
+        description: body.description,
+        subject: body.subject,
+        classId: body.classId,
+      },
+      include: { class: true },
+    })
+    return NextResponse.json(objective)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors[0].message }, { status: 400 })
-    }
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === 'P2002') {
-        return NextResponse.json({ error: 'Subject name already exists' }, { status: 400 })
-      }
-    }
-    return NextResponse.json({ error: 'Failed to create subject' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to create learning objective' }, { status: 500 })
   }
 }
 
-export async function PUT(request: NextRequest) {
+export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
+    
     if (!id) {
-      return NextResponse.json({ error: 'ID required' }, { status: 400 })
+      return NextResponse.json({ error: 'ID is required' }, { status: 400 })
     }
 
-    const body = await request.json()
-    const validated = subjectSchema.parse(body)
-    const subject = await prisma.subject.update({
+    await prisma.learningObjective.delete({
       where: { id },
-      data: validated,
     })
-    return NextResponse.json(subject)
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors[0].message }, { status: 400 })
-    }
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === 'P2002') {
-        return NextResponse.json({ error: 'Subject name already exists' }, { status: 400 })
-      }
-    }
-    return NextResponse.json({ error: 'Failed to update subject' }, { status: 500 })
-  }
-}
-
-export async function DELETE(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const id = searchParams.get('id')
-    if (!id) {
-      return NextResponse.json({ error: 'ID required' }, { status: 400 })
-    }
-
-    await prisma.subject.delete({ where: { id } })
+    
     return NextResponse.json({ success: true })
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to delete subject' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to delete learning objective' }, { status: 500 })
   }
 }
