@@ -1,8 +1,6 @@
 'use client'
 
-import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { YearTermFilter } from './YearTermFilter'
 import {
   Select,
   SelectContent,
@@ -19,34 +17,30 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { toast } from '@/components/ui/use-toast'
-import { Level, Term } from '@prisma/client'
 
-interface Child {
+interface Student {
   id: string
   name: string
 }
 
-interface Subject {
+interface LearningObjective {
   id: string
-  name: string
+  title: string
+  subject: string
 }
 
 interface Rating {
   id: string
-  year: number
-  term: Term
-  level: Level
-  childId: string
-  subjectId: string
+  value: number
+  studentId: string
+  learningObjectiveId: string
+  notes?: string
 }
 
 export function RatingsGrid() {
-  const currentYear = new Date().getFullYear()
-  const [year, setYear] = useState(currentYear)
-  const [term, setTerm] = useState<Term>('MID')
   const queryClient = useQueryClient()
 
-  const { data: children = [] } = useQuery<Child[]>({
+  const { data: students = [] } = useQuery<Student[]>({
     queryKey: ['children'],
     queryFn: async () => {
       const res = await fetch('/api/children')
@@ -55,7 +49,7 @@ export function RatingsGrid() {
     },
   })
 
-  const { data: subjects = [] } = useQuery<Subject[]>({
+  const { data: objectives = [] } = useQuery<LearningObjective[]>({
     queryKey: ['subjects'],
     queryFn: async () => {
       const res = await fetch('/api/subjects')
@@ -65,9 +59,9 @@ export function RatingsGrid() {
   })
 
   const { data: ratings = [] } = useQuery<Rating[]>({
-    queryKey: ['ratings', year, term],
+    queryKey: ['ratings'],
     queryFn: async () => {
-      const res = await fetch(`/api/ratings?year=${year}&term=${term}`)
+      const res = await fetch('/api/ratings')
       if (!res.ok) throw new Error('Failed to fetch')
       return res.json()
     },
@@ -75,11 +69,9 @@ export function RatingsGrid() {
 
   const upsertMutation = useMutation({
     mutationFn: async (data: {
-      year: number
-      term: Term
-      level: Level
-      childId: string
-      subjectId: string
+      value: number
+      studentId: string
+      learningObjectiveId: string
     }) => {
       const res = await fetch('/api/ratings', {
         method: 'POST',
@@ -93,7 +85,7 @@ export function RatingsGrid() {
       return res.json()
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['ratings', year, term] })
+      queryClient.invalidateQueries({ queryKey: ['ratings'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       toast({ title: 'Rating saved' })
     },
@@ -102,22 +94,22 @@ export function RatingsGrid() {
     },
   })
 
-  const getRating = (childId: string, subjectId: string): Level | undefined => {
-    const rating = ratings.find((r) => r.childId === childId && r.subjectId === subjectId)
-    return rating?.level
+  const getRating = (studentId: string, objectiveId: string): number | undefined => {
+    const rating = ratings.find((r) => r.studentId === studentId && r.learningObjectiveId === objectiveId)
+    return rating?.value
   }
 
-  const handleRatingChange = (childId: string, subjectId: string, level: Level) => {
-    upsertMutation.mutate({ year, term, level, childId, subjectId })
+  const handleRatingChange = (studentId: string, objectiveId: string, value: number) => {
+    upsertMutation.mutate({ value, studentId, learningObjectiveId: objectiveId })
   }
 
-  if (children.length === 0 || subjects.length === 0) {
+  if (students.length === 0 || objectives.length === 0) {
     return (
       <div className="space-y-4">
         <h2 className="text-2xl font-bold">Ratings Grid</h2>
         <div className="text-center py-12 border rounded-lg bg-muted/20">
           <p className="text-muted-foreground">
-            Please add children and subjects before entering ratings
+            Please add students and learning objectives before entering ratings
           </p>
         </div>
       </div>
@@ -130,52 +122,47 @@ export function RatingsGrid() {
         <h2 className="text-2xl font-bold">Ratings Grid</h2>
       </div>
 
-      <YearTermFilter
-        year={year}
-        term={term}
-        onYearChange={setYear}
-        onTermChange={setTerm}
-        availableYears={[2023, 2024, 2025, 2026]}
-      />
-
       <div className="border rounded-lg overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[200px] sticky left-0 bg-background z-10">Child</TableHead>
-              {subjects.map((subject) => (
-                <TableHead key={subject.id} className="min-w-[180px]">
-                  {subject.name}
+              <TableHead className="w-[200px] sticky left-0 bg-background z-10">Student</TableHead>
+              {objectives.map((objective) => (
+                <TableHead key={objective.id} className="min-w-[180px]">
+                  {objective.title}
+                  <div className="text-xs text-muted-foreground">{objective.subject}</div>
                 </TableHead>
               ))}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {children.map((child) => (
-              <TableRow key={child.id}>
+            {students.map((student) => (
+              <TableRow key={student.id}>
                 <TableCell className="font-medium sticky left-0 bg-background">
-                  {child.name}
+                  {student.name}
                 </TableCell>
-                {subjects.map((subject) => {
-                  const currentRating = getRating(child.id, subject.id)
+                {objectives.map((objective) => {
+                  const currentRating = getRating(student.id, objective.id)
                   return (
-                    <TableCell key={subject.id}>
+                    <TableCell key={objective.id}>
                       <Select
-                        value={currentRating || ''}
+                        value={currentRating?.toString() || ''}
                         onValueChange={(value) =>
-                          handleRatingChange(child.id, subject.id, value as Level)
+                          handleRatingChange(student.id, objective.id, parseInt(value))
                         }
                       >
                         <SelectTrigger
                           className="w-full"
-                          aria-label={`Rating for ${child.name} in ${subject.name}`}
+                          aria-label={`Rating for ${student.name} in ${objective.title}`}
                         >
                           <SelectValue placeholder="Select..." />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="EXCELLENT">Excellent</SelectItem>
-                          <SelectItem value="MODERATE">Moderate</SelectItem>
-                          <SelectItem value="LOW">Low</SelectItem>
+                          <SelectItem value="1">1 - Beginning</SelectItem>
+                          <SelectItem value="2">2 - Developing</SelectItem>
+                          <SelectItem value="3">3 - Proficient</SelectItem>
+                          <SelectItem value="4">4 - Advanced</SelectItem>
+                          <SelectItem value="5">5 - Mastery</SelectItem>
                         </SelectContent>
                       </Select>
                     </TableCell>
@@ -188,7 +175,7 @@ export function RatingsGrid() {
       </div>
 
       <p className="text-sm text-muted-foreground">
-        Select a rating for each child-subject combination. Changes are saved automatically.
+        Select a rating (1-5) for each student-objective combination. Changes are saved automatically.
       </p>
     </div>
   )

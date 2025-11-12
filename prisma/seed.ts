@@ -1,91 +1,87 @@
-import { PrismaClient, Term, Level } from '@prisma/client'
+import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
 async function main() {
-  console.log('🌱 Seeding database...')
+  console.log('Start seeding...')
 
   // Clear existing data
-  await prisma.rating.deleteMany()
-  await prisma.child.deleteMany()
-  await prisma.subject.deleteMany()
+  await prisma.rating.deleteMany({})
+  await prisma.student.deleteMany({})
+  await prisma.learningObjective.deleteMany({})
+  await prisma.class.deleteMany({})
 
-  // Create children
-  const children = await Promise.all([
-    prisma.child.create({ data: { name: 'Emma Johnson' } }),
-    prisma.child.create({ data: { name: 'Liam Smith' } }),
-    prisma.child.create({ data: { name: 'Olivia Brown' } }),
-    prisma.child.create({ data: { name: 'Noah Davis' } }),
-    prisma.child.create({ data: { name: 'Ava Wilson' } }),
-    prisma.child.create({ data: { name: 'Ethan Martinez' } }),
-    prisma.child.create({ data: { name: 'Sophia Garcia' } }),
-    prisma.child.create({ data: { name: 'Mason Rodriguez' } }),
+  // Create a class
+  const class1 = await prisma.class.create({
+    data: {
+      name: 'Year 5A',
+    },
+  })
+
+  // Create students
+  const students = await Promise.all([
+    prisma.student.create({ data: { name: 'Alice Johnson', classId: class1.id } }),
+    prisma.student.create({ data: { name: 'Bob Smith', classId: class1.id } }),
+    prisma.student.create({ data: { name: 'Charlie Brown', classId: class1.id } }),
+    prisma.student.create({ data: { name: 'Diana Prince', classId: class1.id } }),
+    prisma.student.create({ data: { name: 'Ethan Hunt', classId: class1.id } }),
   ])
 
-  console.log(`✅ Created ${children.length} children`)
+  console.log(`Created ${students.length} students`)
 
-  // Create subjects
-  const subjects = await Promise.all([
-    prisma.subject.create({ data: { name: 'Mathematics' } }),
-    prisma.subject.create({ data: { name: 'English Language Arts' } }),
-    prisma.subject.create({ data: { name: 'Science' } }),
-    prisma.subject.create({ data: { name: 'Social Studies' } }),
-    prisma.subject.create({ data: { name: 'Physical Education' } }),
-    prisma.subject.create({ data: { name: 'Art' } }),
-    prisma.subject.create({ data: { name: 'Music' } }),
+  // Create learning objectives
+  const objectives = await Promise.all([
+    prisma.learningObjective.create({
+      data: {
+        title: 'Understanding Fractions',
+        description: 'Can add and subtract fractions with different denominators',
+        subject: 'Mathematics',
+        classId: class1.id,
+      },
+    }),
+    prisma.learningObjective.create({
+      data: {
+        title: 'Creative Writing',
+        description: 'Can write a coherent story with beginning, middle, and end',
+        subject: 'English',
+        classId: class1.id,
+      },
+    }),
+    prisma.learningObjective.create({
+      data: {
+        title: 'Scientific Method',
+        description: 'Understands and can apply the scientific method',
+        subject: 'Science',
+        classId: class1.id,
+      },
+    }),
   ])
 
-  console.log(`✅ Created ${subjects.length} subjects`)
+  console.log(`Created ${objectives.length} learning objectives`)
 
-  // Create ratings for 2024 and 2025
-  const years = [2024, 2025]
-  const terms = [Term.MID, Term.END]
-  const levels = [Level.EXCELLENT, Level.MODERATE, Level.LOW]
-
-  let ratingCount = 0
-
-  for (const year of years) {
-    for (const term of terms) {
-      for (const child of children) {
-        // Each child gets ratings for 4-6 random subjects per term
-        const numSubjects = Math.floor(Math.random() * 3) + 4
-        const shuffledSubjects = [...subjects].sort(() => Math.random() - 0.5)
-        const selectedSubjects = shuffledSubjects.slice(0, numSubjects)
-
-        for (const subject of selectedSubjects) {
-          // Weight towards better performance
-          const rand = Math.random()
-          let level: Level
-          if (rand < 0.5) {
-            level = Level.EXCELLENT
-          } else if (rand < 0.85) {
-            level = Level.MODERATE
-          } else {
-            level = Level.LOW
-          }
-
-          await prisma.rating.create({
-            data: {
-              year,
-              term,
-              level,
-              childId: child.id,
-              subjectId: subject.id,
-            },
-          })
-          ratingCount++
-        }
-      }
+  // Create some sample ratings
+  const ratings = []
+  for (const student of students) {
+    for (const objective of objectives) {
+      const rating = await prisma.rating.create({
+        data: {
+          studentId: student.id,
+          learningObjectiveId: objective.id,
+          value: Math.floor(Math.random() * 5) + 1, // Random rating 1-5
+          notes: 'Sample rating from seed data',
+        },
+      })
+      ratings.push(rating)
     }
   }
 
-  console.log(`✅ Created ${ratingCount} ratings`)
-  console.log('🎉 Seeding complete!')
+  console.log(`Created ${ratings.length} ratings`)
+  console.log('Seeding finished.')
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Seeding failed:', e)
+    console.error(e)
     process.exit(1)
   })
   .finally(async () => {
