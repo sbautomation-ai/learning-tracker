@@ -272,7 +272,7 @@ const App = () => {
         <div>
           <h1>Class Progress Tracker</h1>
           <p>
-            Minimal React + Supabase app for managing students, subjects, and twice-yearly ratings.
+            App for managing students, subjects, and twice-yearly ratings.
           </p>
         </div>
         <div className="actions">
