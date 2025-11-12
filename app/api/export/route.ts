@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
+import { supabase } from '@/lib/supabase'
 
 export async function GET(request: Request) {
   try {
@@ -10,25 +10,17 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Class ID is required' }, { status: 400 })
     }
 
-    const ratings = await prisma.rating.findMany({
-      where: {
-        student: {
-          classId: classId,
-        },
-      },
-      include: {
-        student: {
-          include: {
-            class: true,
-          },
-        },
-        learningObjective: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    })
+    const { data: ratings, error } = await supabase
+      .from('Rating')
+      .select(`
+        *,
+        student:Student!inner(*, class:Class(*)),
+        learningObjective:LearningObjective(*)
+      `)
+      .eq('student.classId', classId)
+      .order('createdAt', { ascending: false })
 
+    if (error) throw error
     return NextResponse.json(ratings)
   } catch (error) {
     console.error('Export error:', error)

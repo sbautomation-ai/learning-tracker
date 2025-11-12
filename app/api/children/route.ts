@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
+import { supabase } from '@/lib/supabase'
 
 export async function GET() {
   try {
-    const students = await prisma.student.findMany({
-      include: { class: true },
-      orderBy: { name: 'asc' },
-    })
+    const { data: students, error } = await supabase
+      .from('Student')
+      .select('*, class:Class(*)')
+      .order('name', { ascending: true })
+
+    if (error) throw error
     return NextResponse.json(students)
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch students' }, { status: 500 })
@@ -16,13 +18,16 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const student = await prisma.student.create({
-      data: {
+    const { data: student, error } = await supabase
+      .from('Student')
+      .insert({
         name: body.name,
         classId: body.classId,
-      },
-      include: { class: true },
-    })
+      })
+      .select('*, class:Class(*)')
+      .single()
+
+    if (error) throw error
     return NextResponse.json(student)
   } catch (error) {
     return NextResponse.json({ error: 'Failed to create student' }, { status: 500 })
@@ -38,10 +43,12 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'ID is required' }, { status: 400 })
     }
 
-    await prisma.student.delete({
-      where: { id },
-    })
+    const { error } = await supabase
+      .from('Student')
+      .delete()
+      .eq('id', id)
     
+    if (error) throw error
     return NextResponse.json({ success: true })
   } catch (error) {
     return NextResponse.json({ error: 'Failed to delete student' }, { status: 500 })

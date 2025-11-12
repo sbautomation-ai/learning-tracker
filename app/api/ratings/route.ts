@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
+import { supabase } from '@/lib/supabase'
 
 export async function GET(request: Request) {
   try {
@@ -8,31 +8,22 @@ export async function GET(request: Request) {
     const learningObjectiveId = searchParams.get('learningObjectiveId')
     const classId = searchParams.get('classId')
 
-    const where: Record<string, any> = {}
-    
-    if (studentId) where.studentId = studentId
-    if (learningObjectiveId) where.learningObjectiveId = learningObjectiveId
-    if (classId) {
-      where.student = {
-        classId: classId
-      }
-    }
+    let query = supabase
+      .from('Rating')
+      .select(`
+        *,
+        student:Student(*, class:Class(*)),
+        learningObjective:LearningObjective(*)
+      `)
+      .order('createdAt', { ascending: false })
 
-    const ratings = await prisma.rating.findMany({
-      where,
-      include: {
-        student: {
-          include: {
-            class: true,
-          },
-        },
-        learningObjective: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    })
+    if (studentId) query = query.eq('studentId', studentId)
+    if (learningObjectiveId) query = query.eq('learningObjectiveId', learningObjectiveId)
+    if (classId) query = query.eq('student.classId', classId)
 
+    const { data: ratings, error } = await query
+
+    if (error) throw error
     return NextResponse.json(ratings)
   } catch (error) {
     console.error('Ratings fetch error:', error)
@@ -44,29 +35,27 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
     
-    const rating = await prisma.rating.upsert({
-      where: {
-        studentId_learningObjectiveId: {
+    const { data: rating, error } = await supabase
+      .from('Rating')
+      .upsert(
+        {
           studentId: body.studentId,
           learningObjectiveId: body.learningObjectiveId,
+          value: body.value,
+          notes: body.notes,
         },
-      },
-      update: {
-        value: body.value,
-        notes: body.notes,
-      },
-      create: {
-        studentId: body.studentId,
-        learningObjectiveId: body.learningObjectiveId,
-        value: body.value,
-        notes: body.notes,
-      },
-      include: {
-        student: true,
-        learningObjective: true,
-      },
-    })
+        {
+          onConflict: 'studentId,learningObjectiveId',
+        }
+      )
+      .select(`
+        *,
+        student:Student(*),
+        learningObjective:LearningObjective(*)
+      `)
+      .single()
 
+    if (error) throw error
     return NextResponse.json(rating)
   } catch (error) {
     console.error('Rating create/update error:', error)
@@ -83,10 +72,12 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'ID is required' }, { status: 400 })
     }
 
-    await prisma.rating.delete({
-      where: { id },
-    })
+    const { error } = await supabase
+      .from('Rating')
+      .delete()
+      .eq('id', id)
     
+    if (error) throw error
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Rating delete error:', error)

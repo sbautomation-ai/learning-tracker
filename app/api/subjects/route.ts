@@ -1,16 +1,23 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
+import { supabase } from '@/lib/supabase'
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const classId = searchParams.get('classId')
     
-    const objectives = await prisma.learningObjective.findMany({
-      where: classId ? { classId } : undefined,
-      include: { class: true },
-      orderBy: { title: 'asc' },
-    })
+    let query = supabase
+      .from('LearningObjective')
+      .select('*, class:Class(*)')
+      .order('title', { ascending: true })
+
+    if (classId) {
+      query = query.eq('classId', classId)
+    }
+
+    const { data: objectives, error } = await query
+
+    if (error) throw error
     return NextResponse.json(objectives)
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch learning objectives' }, { status: 500 })
@@ -20,15 +27,18 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const objective = await prisma.learningObjective.create({
-      data: {
+    const { data: objective, error } = await supabase
+      .from('LearningObjective')
+      .insert({
         title: body.title,
         description: body.description,
         subject: body.subject,
         classId: body.classId,
-      },
-      include: { class: true },
-    })
+      })
+      .select('*, class:Class(*)')
+      .single()
+
+    if (error) throw error
     return NextResponse.json(objective)
   } catch (error) {
     return NextResponse.json({ error: 'Failed to create learning objective' }, { status: 500 })
@@ -44,10 +54,12 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'ID is required' }, { status: 400 })
     }
 
-    await prisma.learningObjective.delete({
-      where: { id },
-    })
+    const { error } = await supabase
+      .from('LearningObjective')
+      .delete()
+      .eq('id', id)
     
+    if (error) throw error
     return NextResponse.json({ success: true })
   } catch (error) {
     return NextResponse.json({ error: 'Failed to delete learning objective' }, { status: 500 })
